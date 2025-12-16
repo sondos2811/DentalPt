@@ -61,26 +61,42 @@ class PatientAdmissionRemoteDatasourceImpl
           .eq("name", type) as List<dynamic>;
       final patientIds =
           response.map((data) => data['patient_id'] as int).toList();
-      final patients = await Future.wait(patientIds.map((id) async {
-        // Fetch patient data
-        final patientResponse = await supabase
-            .from("patients")
-            .select()
-            .eq("id", id)
-            .eq("status", status)
-            .single();
+      
+      print('Found ${patientIds.length} patient IDs for $type');
+      
+      final patients = <PatientModel>[];
+      
+      for (int id in patientIds) {
+        try {
+          // Fetch patient data
+          final patientResponse = await supabase
+              .from("patients")
+              .select()
+              .eq("id", id)
+              .single();
 
-        // Fetch diagnoses for this patient
-        final diagnosesResponse = await supabase
-            .from("diagnosis")
-            .select()
-            .eq("patient_id", id) as List<dynamic>;
+          print('Patient $id status: ${patientResponse['status']}, looking for: $status');
 
-        // Combine patient data with diagnoses
-        patientResponse['diagnoses'] = diagnosesResponse;
+          // Filter by status
+          if (patientResponse['status'] == status) {
+            // Fetch diagnoses for this patient
+            final diagnosesResponse = await supabase
+                .from("diagnosis")
+                .select()
+                .eq("patient_id", id) as List<dynamic>;
 
-        return PatientModel.fromJson(patientResponse);
-      }));
+            // Combine patient data with diagnoses
+            patientResponse['diagnoses'] = diagnosesResponse;
+
+            patients.add(PatientModel.fromJson(patientResponse));
+            print('Added patient $id to results');
+          }
+        } catch (e) {
+          print('Error fetching patient $id for diagnosis $type: $e');
+        }
+      }
+      
+      print('Returning ${patients.length} patients for $type');
       return patients;
     } catch (e) {
       print('Error in fetching patient: $e');
